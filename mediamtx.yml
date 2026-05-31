@@ -1,0 +1,8 @@
+paths:
+  all:
+    source: publisher
+protocols: [tcp, udp]
+webrtc: yes
+webrtcAddress: :8889
+rtmp: yes
+rtmpAddress: :1935
