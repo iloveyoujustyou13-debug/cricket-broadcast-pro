@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: cbp-postgres
+    environment:
+      POSTGRES_DB: cricket_broadcast
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: supersecretpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    container_name: cbp-mediamtx
+    ports:
+      - "8554:8554" # RTSP
+      - "1935:1935" # RTMP
+      - "8888:8888" # HLS
+      - "8889:8889" # WebRTC
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml
+
+  backend:
+    build: ./backend
+    container_name: cbp-backend
+    ports:
+      - "5000:5000"
+    environment:
+      - DATABASE_URL=postgresql://admin:supersecretpassword@postgres:5432/cricket_broadcast
+      - MEDIAMTX_URL=http://mediamtx:8889
+    depends_on:
+      - postgres
+      - mediamtx
+
+volumes:
+  pgdata:
+  
