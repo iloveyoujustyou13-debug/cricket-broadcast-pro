@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CBP Wireless Camera Node</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl text-center">
+        <h1 class="text-xl font-black text-rose-500 mb-2 tracking-wider">CBP FIELD NODE</h1>
+        <p class="text-xs text-slate-400 mb-6">Wireless WebRTC Broadcast Camera Client</p>
+
+        <div class="mb-4">
+            <label class="block text-left text-xs font-bold text-slate-400 uppercase mb-2">Assign Camera Slot</label>
+            <select id="cameraSelect" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm focus:outline-none focus:border-rose-500">
+                <option value="cam1">Camera 1 (Main Ground View)</option>
+                <option value="cam2">Camera 2 (Batsman View)</option>
+                <option value="cam3">Camera 3 (Bowler View)</option>
+                <option value="cam4">Camera 4 (Boundary/Score)</option>
+            </select>
+        </div>
+
+        <video id="localPreview" autoplay playsinline muted class="w-full aspect-video bg-black rounded-lg mb-6 border border-slate-800 object-cover"></video>
+
+        <button id="connectBtn" class="w-full bg-rose-600 hover:bg-rose-500 text-white font-bold py-3 px-6 rounded-xl transition duration-200 tracking-wide shadow-lg shadow-rose-600/20">
+            INITIALIZE BROADCAST STREAM
+        </button>
+    </div>
+
+    <script>
+        const connectBtn = document.getElementById('connectBtn');
+        const cameraSelect = document.getElementById('cameraSelect');
+        const localPreview = document.getElementById('localPreview');
+        
+        let localStream;
+        let pc;
+        let ws;
+
+        connectBtn.addEventListener('click', async () => {
+            const cameraId = cameraSelect.value;
+            connectBtn.disabled = true;
+            connectBtn.innerText = "STREAM RUNNING...";
+            connectBtn.classList.replace('bg-rose-600', 'bg-emerald-600');
+
+            // Capture high-definition video source directly from mobile sensor
+            localStream = await navigator.mediaDevices.getUserMedia({
+                video: { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
+                audio: true
+            });
+            localPreview.srcObject = localStream;
+
+            ws = new WebSocket('ws://' + window.location.hostname + ':5000');
+
+            ws.onopen = () => {
+                ws.send(JSON.stringify({ type: 'register_camera', cameraId }));
+            };
+
+            ws.onmessage = async (message) => {
+                const data = JSON.parse(message.data);
+
+                if (data.type === 'answer') {
+                    await pc.setRemoteDescription(new RTCSessionDescription(data.answer));
+                } else if (data.type === 'ice-candidate') {
+                    await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+                }
+            };
+
+            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            
+            localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    ws.send(JSON.stringify({ type: 'ice-candidate', targetId: cameraId, candidate: event.candidate }));
+                }
+            };
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            ws.send(JSON.stringify({ type: 'offer', targetId: cameraId, offer }));
+        });
+    </script>
+</body>
+</html>
+
